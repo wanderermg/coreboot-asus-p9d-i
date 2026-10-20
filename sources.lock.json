@@ -1,0 +1,46 @@
+{
+  "coreboot": {
+    "commit": "a36dc936968c198bc45018843ada22680dd85a2e",
+    "submodules": [
+      "-588da8d6deb4b9be60ccedfa76e721c6a2ea9464 3rdparty/amd_blobs",
+      " b5eaba47efc5e4e3029086d5c25eee0e8dbb0129 3rdparty/arm-trusted-firmware (v2.15.0-368-gb5eaba47e)",
+      " c236894e3c1de8501f007a9bf61255684c89cd30 3rdparty/blobs (heads/main)",
+      " 8be37372097d1aa5e03b565936db7891b6180e73 3rdparty/cmocka (cmocka-1.1.7-7-g8be3737)",
+      " 3ec70fbc458e32eef0d0b1de79688b4dc48cbd57 3rdparty/ffs (heads/main)",
+      "-98426bfd958eb7397c474ff5d440dc9a1d146215 3rdparty/fsp",
+      " bdc92abe5c499c3fd7988b76a128d05c9120a520 3rdparty/intel-microcode (microcode-20260925)",
+      " 0031ac73447baeb197fb2d80e5fba2470716e76d 3rdparty/intel-sec-tools (v2.2-166-g0031ac7)",
+      " 2c446dbcde4e23fd1dd01ab77b42758c70169758 3rdparty/libgfxinit (heads/main)",
+      " 61f7287f18b249408a79bf9ab5e72568965cca2c 3rdparty/libhwbase (heads/main)",
+      " 591c8f53482243626901e1cc8a4ae321f314040d 3rdparty/open-power-signing-utils (v0.8-4-g591c8f5)",
+      " 5019fd124b4c46e1581129c5154fc2cdd3b777ed 3rdparty/opensbi (v1.1-47-g5019fd12)",
+      "-6379308814bd00a8b6e36a4715bdb86ba019a3a7 3rdparty/qc_blobs",
+      " 1f3258261a4f4d6c60ec4447c7a03acf2509b984 3rdparty/stm (PSTI7689-65-g1f32582)",
+      " f691f7675d46c8f4726146803543a095b68477c5 3rdparty/vboot (f691f76)",
+      " 0411c75e1787a0d2dc18d168def7352cef9e8c12 src/vendorcode/amd/opensil/genoa_poc/opensil (heads/main)",
+      " 52b83c56a3a653c287f5839a5986eda22677f304 src/vendorcode/amd/opensil/phoenix_poc/opensil (52b83c5)",
+      " a65485ffa7bddec696576323c6fc839ea5bb081d src/vendorcode/amd/opensil/turin_poc/opensil (a65485f)",
+      " 567a1c99b0c05136b2685ff14d893f85ba16e988 util/goswid (v0.1-5-g567a1c9)",
+      " 80c499ebbe8a64aa2ee4222e6a8f342f465f6680 util/nvidia/cbootimage (v1.7-8-g80c499e)"
+    ]
+  },
+  "EDK2": {
+    "commit": "f7cbaab0d5a224d15a144c049fc83f8d730b45fb",
+    "submodules": [
+      " e230f474b87134e8c6c85b630084c612057f253e BaseTools/Source/C/BrotliCompress/brotli (e230f47)",
+      " 0bebf8b8c7f07abe3571ded48a11aa907a1ffb20 CryptoPkg/Library/MbedTlsLib/mbedtls (0bebf8b)",
+      " 8cf17aaeb4599f8af87fefd810b5b5fee90fe69e CryptoPkg/Library/OpensslLib/openssl (8cf17aa)",
+      " 659b502401d9439443dc636acb10ca711afe8bc5 LvglPkg (heads/main)",
+      " e230f474b87134e8c6c85b630084c612057f253e MdeModulePkg/Library/BrotliCustomDecompressLib/brotli (e230f47)",
+      " 4ef89209a239c1aea328cf13c05a2807e5c146d1 MdeModulePkg/Universal/RegularExpressionDxe/oniguruma (4ef8920)",
+      " cfff805481bdea27f900c32698171286542b8d3c MdePkg/Library/BaseFdtLib/libfdt (cfff805)",
+      " 370b5944c046bab043dd8b133727b2135af7747a MdePkg/Library/MipiSysTLib/mipisyst (370b594)",
+      " e9ebfa7e77a6bee77df44e096b100e7131044059 RedfishPkg/Library/JsonLib/jansson (e9ebfa7)",
+      " f55cf6d48ec69b4ac60a63903e9c6a2cb0fd155d SecurityPkg/DeviceSecurity/SpdmLib/libspdm (f55cf6d)",
+      " bc29a21d44b01396223c152a4834e52318591770 TcgTpmPkg/Library/TpmLib/TPM (bc29a21)",
+      " 1cc9cde3448cdd2e000886a26acf1caac2db7cf1 UnitTestFrameworkPkg/Library/CmockaLib/cmocka (1cc9cde)",
+      " 86add13493e5c881d7e4ba77fb91c1f57752b3a4 UnitTestFrameworkPkg/Library/GoogleTestLib/googletest (86add13)",
+      " 83d4e1ebef3588fae48b69a7352cc21801cb70bc UnitTestFrameworkPkg/Library/SubhookLib/subhook (heads/main)"
+    ]
+  }
+}

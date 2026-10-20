@@ -1,0 +1,78 @@
+## SPDX-License-Identifier: GPL-2.0-only
+
+if BOARD_ASUS_P9D_I
+
+config BOARD_SPECIFIC_OPTIONS
+	def_bool y
+	select BOARD_ROMSIZE_KB_8192
+	select DRIVERS_ASPEED_AST2050
+	select ACPI_S1_NOT_SUPPORTED
+	select HAVE_ACPI_TABLES
+	select NORTHBRIDGE_INTEL_HASWELL
+	select SERIRQ_CONTINUOUS_MODE
+	select SOUTHBRIDGE_INTEL_LYNXPOINT
+	select SUPERIO_NUVOTON_COMMON_COM_A
+	select SUPERIO_NUVOTON_NCT6779D
+	select IPMI_KCS
+	select IPMI_KCS_ROMSTAGE
+
+config MAINBOARD_DIR
+	default "asus/p9d-i"
+
+config MAINBOARD_PART_NUMBER
+	default "P9D-I"
+
+config CBFS_SIZE
+	default 0x400000
+
+config HASWELL_HIDE_PEG_FROM_MRC
+	default n
+
+config SUPERIO_NUVOTON_PNP_BASE
+	default 0x2e
+
+config P9DI_REQUIRE_ECC
+	bool "Stop boot if ECC is not active on populated channels"
+	default y
+	help
+	  Require both ECC I/O and ECC logic in MAD_DIMM after MRC has run.
+	  This checks the controller mode, not end-to-end error correction.
+
+config P9DI_DISABLE_MRC_CACHE
+	bool "Always train memory without cached MRC data"
+	default y
+	depends on !USE_NATIVE_RAMINIT && !USE_BROADWELL_MRC
+	help
+	  Do not read or save MRC training data on this experimental ECC port.
+	  The cached path returned with ECC disabled in a repeated r7 boot.
+	  Keep live SPD validation and the post-MRC ECC controller guard.
+
+config P9DI_DUAL_UART_DIAGNOSTICS
+	bool "Emit labelled COM1/COM2 markers for SOL bring-up"
+	default n
+	depends on !USE_NATIVE_RAMINIT && !USE_BROADWELL_MRC
+	help
+	  Enable both NCT6779D UARTs and LPC decodes. Emit bounded, polling
+	  markers at 57600 8N1, with a distinct physical-port label.
+	  Set the normal serial console to 57600 as well.
+
+config P9DI_POST_DIAGNOSTICS
+	bool "Emit framed POST diagnostics and capture UART routing"
+	default n
+	depends on P9DI_DUAL_UART_DIAGNOSTICS && POST_IO
+	help
+	  Emit CRC-protected frames to port 80 before each UART marker.
+	  Capture NCT6779D and ASPEED UART routing without changing routes.
+	  A 5 ms delay per byte lets the BMC snoop driver record the stream.
+	  Use the supplied live collector: the BMC history holds only 512 bytes.
+
+config P9DI_SIMPLE_POST
+	bool "Emit single-byte memory initialization checkpoints"
+	default n
+	depends on !P9DI_DUAL_UART_DIAGNOSTICS && POST_IO
+	help
+	  Emit one byte to port 80 at selected SPD, MRC and ECC boundaries.
+	  No pacing, UART setup, register snapshots or SMBus probes are added.
+	  Read the BMC POST history and the supplied r10 code table.
+
+endif

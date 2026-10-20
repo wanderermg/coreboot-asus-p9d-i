@@ -1,0 +1,4 @@
+## SPDX-License-Identifier: GPL-2.0-only
+
+config BOARD_ASUS_P9D_I
+	bool "P9D-I (experimental)"

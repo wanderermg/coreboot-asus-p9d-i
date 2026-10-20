@@ -1,0 +1,341 @@
+diff --git a/payloads/external/Makefile.mk b/payloads/external/Makefile.mk
+index 859e555e..144b0c1f 100644
+--- a/payloads/external/Makefile.mk
++++ b/payloads/external/Makefile.mk
+@@ -210,6 +210,7 @@ EDK2_PAYLOAD_ARGS = \
+ 	CC="$(HOSTCC)" \
+ 	CONFIG_EDK2_REPOSITORY=$(CONFIG_EDK2_REPOSITORY) \
+ 	CONFIG_EDK2_TAG_OR_REV=$(CONFIG_EDK2_TAG_OR_REV) \
++	CONFIG_BOARD_ASUS_P9D_I=$(CONFIG_BOARD_ASUS_P9D_I) \
+ 	CONFIG_EDK2_UEFIPAYLOAD=$(CONFIG_EDK2_UEFIPAYLOAD) \
+ 	CONFIG_EDK2_UNIVERSAL_PAYLOAD=$(CONFIG_EDK2_UNIVERSAL_PAYLOAD) \
+ 	CONFIG_EDK2_REPO_OFFICIAL=$(CONFIG_EDK2_REPO_OFFICIAL) \
+diff --git a/payloads/external/edk2/Makefile b/payloads/external/edk2/Makefile
+index f2c80183..2bc8f47b 100644
+--- a/payloads/external/edk2/Makefile
++++ b/payloads/external/edk2/Makefile
+@@ -279,7 +279,7 @@ $(EDK2_PLATFORMS_PATH): $(WORKSPACE)
+ 
+ $(EDK2_PATH): $(WORKSPACE)
+ 	if [ ! -d "$(EDK2_PATH)" ]; then \
+-		git clone --recurse-submodules $(CONFIG_EDK2_REPOSITORY) $(EDK2_PATH) -j5; \
++		git clone $(CONFIG_EDK2_REPOSITORY) $(EDK2_PATH) -j5; \
+ 	fi
+ 	cd $(EDK2_PATH); \
+ 		git checkout MdeModulePkg/Logo/Logo.bmp > /dev/null 2>&1 || true; \
+@@ -292,11 +292,11 @@ $(EDK2_PATH): $(WORKSPACE)
+ 		if git status --ignore-submodules=dirty | grep -q -e clean -e "nothing added"; then \
+ 			echo "    Checking out $(project_name) revision $(CONFIG_EDK2_TAG_OR_REV)"; \
+ 			git checkout --detach $(CONFIG_EDK2_TAG_OR_REV) -f; \
+-			git submodule update --checkout --recursive; \
++			git submodule update --checkout; \
+ 		else \
+ 			echo "    Working directory not clean; will not overwrite"; \
+ 		fi; \
+-		git submodule update --init --checkout --recursive
++		git submodule update --init --checkout
+ 
+ logo: $(EDK2_PATH)
+ 	case "$(CONFIG_EDK2_BOOTSPLASH_FILE)" in \
+@@ -375,6 +375,7 @@ print:
+ prep: $(EDK2_PATH) $(EDK2_PLATFORMS_PATH) clean checktools logo ipxe_rom
+ 	cd $(WORKSPACE); \
+ 		source $(EDK2_PATH)/edksetup.sh; \
++		$(if $(filter y,$(CONFIG_BOARD_ASUS_P9D_I)),python3 $(CURDIR)/relative_genfw.py $(EDK2_PATH)/Conf/build_rule.txt $(EDK2_PATH)/BaseTools/Conf/build_rule.template || exit 1;) \
+ 		unset CC; $(MAKE) -C $(EDK2_PATH)/BaseTools 2>&1; \
+ 
+ $(WORKSPACE)/Build/UefiPayloadPkgX64/$(RELEASE_STR)_GCC/FV/UEFIPAYLOAD.fd: \
+diff --git a/src/drivers/aspeed/common/ast_i2c.c b/src/drivers/aspeed/common/ast_i2c.c
+index b4ee0180..04edc54c 100644
+--- a/src/drivers/aspeed/common/ast_i2c.c
++++ b/src/drivers/aspeed/common/ast_i2c.c
+@@ -89,6 +89,11 @@ static struct software_i2c_ops ast_ops = {
+ 
+ int ast_software_i2c_read(struct ast_private *ast_priv, uint8_t edid[128])
+ {
++	uint8_t offset = 0;
++	struct i2c_msg segments[] = {
++		{ .slave = 0x50, .buf = &offset, .len = 1 },
++		{ .slave = 0x50, .flags = I2C_M_RD, .buf = edid, .len = 128 },
++	};
+ 	struct software_i2c_ops *backup;
+ 	int ret;
+ 
+@@ -105,7 +110,8 @@ int ast_software_i2c_read(struct ast_private *ast_priv, uint8_t edid[128])
+ 	udelay(100);
+ 
+ 	/* Need to reset internal EEPROM counter to 0 */
+-	ret = i2c_read_bytes(ASPEED_BUS, 0x50, 0, edid, 128);
++	/* This DDC bus always uses the ASPEED software implementation. */
++	ret = software_i2c_transfer(ASPEED_BUS, segments, ARRAY_SIZE(segments));
+ 
+ 	software_i2c[ASPEED_BUS] = backup;
+ 
+diff --git a/src/northbridge/intel/haswell/haswell_mrc/raminit.c b/src/northbridge/intel/haswell/haswell_mrc/raminit.c
+index 4f966369..f42ba418 100644
+--- a/src/northbridge/intel/haswell/haswell_mrc/raminit.c
++++ b/src/northbridge/intel/haswell/haswell_mrc/raminit.c
+@@ -27,8 +27,23 @@
+ 
+ #define MRC_CACHE_VERSION 1
+ 
++static void mrc_putchar(unsigned char byte)
++{
++	/* The binary MRC character callback otherwise bypasses log filtering. */
++	if (CONFIG(BOARD_ASUS_P9D_I) && get_log_level() < BIOS_DEBUG)
++		return;
++	do_putchar(byte);
++}
++
++void __weak mb_read_spd(const struct spd_info *spdi, uint8_t data[4][SPD_SIZE_MAX_DDR3])
++{
++}
++
+ static void save_mrc_data(struct pei_data *pei_data)
+ {
++	if (CONFIG(P9DI_DISABLE_MRC_CACHE))
++		return;
++
+ 	/* Save the MRC S3 restore data to cbmem */
+ 	mrc_cache_stash_data(MRC_TRAINING_DATA, MRC_CACHE_VERSION, pei_data->mrc_output,
+ 			     pei_data->mrc_output_len);
+@@ -42,6 +57,11 @@ static void prepare_mrc_cache(struct pei_data *pei_data)
+ 	pei_data->mrc_input = NULL;
+ 	pei_data->mrc_input_len = 0;
+ 
++	if (CONFIG(P9DI_DISABLE_MRC_CACHE)) {
++		printk(BIOS_INFO, "P9D-I: bypassing MRC cache; full memory training required\n");
++		return;
++	}
++
+ 	pei_data->mrc_input =
+ 		mrc_cache_current_mmap_leak(MRC_TRAINING_DATA,
+ 					    MRC_CACHE_VERSION,
+@@ -71,7 +91,9 @@ static void sdram_initialize(struct pei_data *pei_data)
+ 	 * Always pass in mrc_cache data.  The driver will determine
+ 	 * whether to use the data or not.
+ 	 */
++	mb_raminit_status("MRC_CACHE_ENTER", 0);
+ 	prepare_mrc_cache(pei_data);
++	mb_raminit_status("MRC_CACHE_READY", pei_data->mrc_input_len);
+ 
+ 	/* If MRC data is not found, we cannot continue S3 resume */
+ 	if (pei_data->boot_mode == 2 && !pei_data->mrc_input) {
+@@ -81,16 +103,19 @@ static void sdram_initialize(struct pei_data *pei_data)
+ 	}
+ 
+ 	/* Pass console handler in pei_data */
+-	pei_data->tx_byte = do_putchar;
++	pei_data->tx_byte = mrc_putchar;
+ 
+ 	/*
+ 	 * Locate and call UEFI System Agent binary. The binary needs to be at a fixed offset
+ 	 * in the flash and can therefore only reside in the COREBOOT fmap region. We don't care
+ 	 * about leaking the mapping.
+ 	 */
++	mb_raminit_status("MRC_MAP", 0);
+ 	entry = cbfs_ro_map("mrc.bin", NULL);
+ 	if (entry) {
++		mb_raminit_status("MRC_ENTER", 0);
+ 		int rv = entry(pei_data);
++		mb_raminit_status("MRC_RETURN", rv);
+ 
+ 		/* The mrc.bin reconfigures USB, so usbdebug needs to be reinitialized */
+ 		if (CONFIG(USBDEBUG_IN_PRE_RAM))
+@@ -116,6 +141,7 @@ static void sdram_initialize(struct pei_data *pei_data)
+ 
+ 	/* Print the MRC version after executing the UEFI PEI stage */
+ 	u32 version = mchbar_read32(MRC_REVISION);
++	mb_raminit_status("MRC_VERSION", version);
+ 	printk(BIOS_DEBUG, "MRC Version %u.%u.%u Build %u\n",
+ 		(version >> 24) & 0xff, (version >> 16) & 0xff,
+ 		(version >>  8) & 0xff, (version >>  0) & 0xff);
+@@ -125,7 +151,9 @@ static void sdram_initialize(struct pei_data *pei_data)
+ 	 * Ensure the mc_init_done_ack bit is set before continuing. Otherwise,
+ 	 * attempting to access memory will lock up the system.
+ 	 */
+-	if (!(mchbar_read32(MC_INIT_STATE_G) & (1 << 5))) {
++	const uint32_t init_state = mchbar_read32(MC_INIT_STATE_G);
++	mb_raminit_status("MRC_INIT_STATE", init_state);
++	if (!(init_state & (1 << 5))) {
+ 		printk(BIOS_EMERG, "Memory controller did not acknowledge raminit.\n");
+ 		die("MRC raminit failed\n");
+ 	}
+@@ -183,6 +211,7 @@ static uint8_t map_to_pei_oc_pin(const uint8_t oc_pin)
+ 
+ void perform_raminit(const bool s3resume)
+ {
++	mb_raminit_status("RAMINIT_ENTER", s3resume);
+ 	const struct device *gbe = pcidev_on_root(0x19, 0);
+ 
+ 	const struct northbridge_intel_haswell_config *cfg = config_of_soc();
+@@ -249,6 +278,9 @@ void perform_raminit(const bool s3resume)
+ 	timestamp_add_now(TS_INITRAM_START);
+ 
+ 	copy_spd(&pei_data, &spdi);
++	mb_raminit_status("SPD_ENTER", 0);
++	mb_read_spd(&spdi, pei_data.spd_data);
++	mb_raminit_status("SPD_READY", 0);
+ 
+ 	sdram_initialize(&pei_data);
+ 
+@@ -258,7 +290,9 @@ void perform_raminit(const bool s3resume)
+ 
+ 	intel_early_me_status();
+ 
++	mb_raminit_status("CBMEM_ENTER", 0);
+ 	bool cbmem_was_initted = !cbmem_recovery(s3resume);
++	mb_raminit_status("CBMEM_READY", cbmem_was_initted);
+ 	if (s3resume && !cbmem_was_initted) {
+ 		/* Failed S3 resume, reset to come up cleanly */
+ 		printk(BIOS_CRIT, "Failed to recover CBMEM in S3 resume.\n");
+@@ -272,7 +306,8 @@ void perform_raminit(const bool s3resume)
+ 	/*
+ 	 * TODO: `setup_sdram_info()` uses SPD data to fill in various fields. However,
+ 	 * even though Haswell MRC reads SPD data over SMBus, it does not pass the data
+-	 * back to coreboot. So, we currently only have SPD data for memory-down slots.
++	 * back to coreboot. A mainboard can collect live SPD with mb_read_spd();
++	 * otherwise, we only have SPD data for memory-down slots.
+ 	 *
+ 	 * We have to read the SPD data over SMBus again for coreboot to use it. But we
+ 	 * can be smart and only read the bytes that `setup_sdram_meminfo()` needs.
+diff --git a/src/northbridge/intel/haswell/raminit.h b/src/northbridge/intel/haswell/raminit.h
+index b1f30909..586b9715 100644
+--- a/src/northbridge/intel/haswell/raminit.h
++++ b/src/northbridge/intel/haswell/raminit.h
+@@ -4,6 +4,7 @@
+ #define NORTHBRIDGE_INTEL_HASWELL_RAMINIT_H
+ 
+ #include <types.h>
++#include <device/dram/ddr3.h>
+ 
+ #include "chip.h"
+ #include "haswell.h"
+@@ -18,6 +19,11 @@ struct spd_info {
+ /* Mainboard callback to fill in the SPD addresses */
+ void mb_get_spd_map(struct spd_info *spdi);
+ 
++/* Optional live SPD collection/validation before Haswell MRC; addresses stay unchanged. */
++void mb_read_spd(const struct spd_info *spdi, uint8_t data[4][SPD_SIZE_MAX_DDR3]);
++/* Optional progress reporting; default has no hardware side effects. */
++void mb_raminit_status(const char *event, uint32_t value);
++
+ void get_spd_info(struct spd_info *spdi, const struct northbridge_intel_haswell_config *cfg);
+ const uint8_t *get_spd_from_cbfs(struct spd_info *spdi);
+ void report_memory_config(void);
+diff --git a/src/northbridge/intel/haswell/raminit_shared.c b/src/northbridge/intel/haswell/raminit_shared.c
+index 608e0b34..a2ab6112 100644
+--- a/src/northbridge/intel/haswell/raminit_shared.c
++++ b/src/northbridge/intel/haswell/raminit_shared.c
+@@ -180,9 +180,15 @@ void setup_sdram_meminfo(const uint8_t *spd_data[NUM_CHANNELS][NUM_SLOTS])
+ 				dimm->mod_id =
+ 					(spd_data[channel][slot][SPD_DDR3_MOD_ID2] << 8) |
+ 					(spd_data[channel][slot][SPD_DDR3_MOD_ID1] & 0xff);
+-				/* TODO: Should be taken from SPD instead */
+-				dimm->mod_type = SPD_DDR3_DIMM_TYPE_SO_DIMM;
+-				dimm->bus_width = MEMORY_BUS_WIDTH_64;
++				if (spd_data[channel][slot][2] == SPD_MEMORY_TYPE_SDRAM_DDR3) {
++					dimm->mod_type = spd_data[channel][slot][3] &
++						SPD_DDR3_DIMM_TYPE_MASK;
++					/* SPD width includes the ECC extension (bits 4:3). */
++					dimm->bus_width = spd_data[channel][slot][8] & 0x1f;
++				} else {
++					dimm->mod_type = SPD_DDR3_DIMM_TYPE_SO_DIMM;
++					dimm->bus_width = MEMORY_BUS_WIDTH_64;
++				}
+ 				dimm_cnt++;
+ 			}
+ 		}
+diff --git a/src/northbridge/intel/haswell/romstage.c b/src/northbridge/intel/haswell/romstage.c
+index a6726f7f..e9029d4d 100644
+--- a/src/northbridge/intel/haswell/romstage.c
++++ b/src/northbridge/intel/haswell/romstage.c
+@@ -16,15 +16,22 @@ void __weak mb_late_romstage_setup(void)
+ {
+ }
+ 
++void __weak mb_raminit_status(const char *event, uint32_t value)
++{
++}
++
+ /* The romstage entry point for this platform is not mainboard-specific, hence the name */
+ void mainboard_romstage_entry(void)
+ {
++	mb_raminit_status("ROMSTAGE_ENTRY", 0);
+ 	early_pch_init();
++	mb_raminit_status("PCH_READY", 0);
+ 
+ 	/* Perform some early chipset initialization required
+ 	 * before RAM initialization can work
+ 	 */
+ 	haswell_early_initialization();
++	mb_raminit_status("NORTHBRIDGE_READY", 0);
+ 	printk(BIOS_DEBUG, "Back from haswell_early_initialization()\n");
+ 
+ 	const bool s3resume = southbridge_detect_s3_resume();
+@@ -37,12 +44,15 @@ void mainboard_romstage_entry(void)
+ 
+ 	post_code(0x3a);
+ 
++	mb_raminit_status("PLATFORM_INFO_ENTER", 0);
+ 	report_platform_info();
++	mb_raminit_status("PLATFORM_INFO_DONE", 0);
+ 
+ 	if (CONFIG(INTEL_TXT))
+ 		intel_txt_romstage_init();
+ 
+ 	perform_raminit(s3resume);
++	mb_raminit_status("RAMINIT_COMPLETE", 0);
+ 
+ 	if (CONFIG(INTEL_TXT)) {
+ 		printk(BIOS_DEBUG, "Check TXT_ERROR register after MRC\n");
+diff --git a/src/southbridge/intel/common/gpio.c b/src/southbridge/intel/common/gpio.c
+index caba69cc..556c5f2d 100644
+--- a/src/southbridge/intel/common/gpio.c
++++ b/src/southbridge/intel/common/gpio.c
+@@ -6,6 +6,7 @@
+ #include <device/pci_type.h>
+ #include <gpio.h>
+ #include <stdint.h>
++#include <string.h>
+ 
+ #include "southbridge/intel/common/gpio.h"
+ #include "southbridge/intel/common/lpc_def.h"
+@@ -49,6 +50,16 @@ static u16 get_gpio_base(void)
+ #endif
+ }
+ 
++static u32 gpio_set3_value(const struct pch_gpio_set3 *config)
++{
++	u32 value = 0;
++
++	/* The packed set3 structure is two bytes; do not load four bytes from it. */
++	_Static_assert(sizeof(*config) <= sizeof(value), "GPIO set3 exceeds register size");
++	memcpy(&value, config, sizeof(*config));
++	return value;
++}
++
+ void setup_pch_gpios(const struct pch_gpio_map *gpio)
+ {
+ 	u16 gpiobase = get_gpio_base();
+@@ -90,15 +101,15 @@ void setup_pch_gpios(const struct pch_gpio_map *gpio)
+ 
+ 	/* GPIO Set 3 */
+ 	if (gpio->set3.level)
+-		outl(*((u32 *)gpio->set3.level), gpiobase + GP_LVL3);
++		outl(gpio_set3_value(gpio->set3.level), gpiobase + GP_LVL3);
+ 	if (gpio->set3.mode)
+-		outl(*((u32 *)gpio->set3.mode), gpiobase + GPIO_USE_SEL3);
++		outl(gpio_set3_value(gpio->set3.mode), gpiobase + GPIO_USE_SEL3);
+ 	if (gpio->set3.direction)
+-		outl(*((u32 *)gpio->set3.direction), gpiobase + GP_IO_SEL3);
++		outl(gpio_set3_value(gpio->set3.direction), gpiobase + GP_IO_SEL3);
+ 	if (gpio->set3.level)
+-		outl(*((u32 *)gpio->set3.level), gpiobase + GP_LVL3);
++		outl(gpio_set3_value(gpio->set3.level), gpiobase + GP_LVL3);
+ 	if (gpio->set3.reset)
+-		outl(*((u32 *)gpio->set3.reset), gpiobase + GP_RST_SEL3);
++		outl(gpio_set3_value(gpio->set3.reset), gpiobase + GP_RST_SEL3);
+ }
+ 
+ /*

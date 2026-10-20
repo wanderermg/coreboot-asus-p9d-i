@@ -1,0 +1,22 @@
+# Local inputs and build output must never be published.
+/build/
+/blobs/
+/private/
+/artifacts/
+/recovery/
+/backups/
+*.bin
+*.rom
+*.fd
+*.cap
+*.bundle
+*.tar*
+*.zip
+*.7z
+*.log
+*.jnlp
+*.pem
+*.key
+.env*
+__pycache__/
+*.py[cod]
